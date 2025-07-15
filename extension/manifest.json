@@ -1,0 +1,29 @@
+{
+    "manifest_version": 3,
+    "name": "Agent Extension",
+    "version": "1.0",
+    "description": "Browse and interact with your browser using Copilot with voice commands.",
+    "background": {
+        "service_worker": "dist/background.js"
+    },
+    "action": {
+        "default_popup": "src/static/popup/popup.html",
+        "default_icon": {
+            "16": "assets/Copilot-Logo1.png",
+            "48": "assets/Copilot-Logo1.png",
+            "128": "assets/Copilot-Logo1.png"
+        }
+    },
+    "icons": {
+        "16": "assets/Copilot-Logo1.png",
+        "48": "assets/Copilot-Logo1.png",
+        "128": "assets/Copilot-Logo1.png"
+    },
+    "permissions": ["tabs", "activeTab", "scripting", "storage"],
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["dist/initializeAudio.js"]
+        }
+    ]
+}
