@@ -54,7 +54,7 @@ class ToolDefinition:
 EXTENSION_TOOLS = [
     ToolDefinition(
         name="web_search",
-        description="Search the web for information.",
+        description="Search the web for information on any user question or query.",
         parameters=[
             ToolParameter(name="query", type="string", description="The search query to use."),
         ]
@@ -64,7 +64,6 @@ EXTENSION_TOOLS = [
         description="Perform a click action on a web element which should be identified by CSS selector and described.",
         parameters=[
             ToolParameter(name="selector", type="string", description="The CSS selector of the element to click.", required=True),
-            ToolParameter(name="description", type="string", description="A description of the element to be clicked.")
         ]
     ),
     ToolDefinition(
@@ -139,6 +138,20 @@ EXTENSION_TOOLS = [
             ToolParameter(name="query", type="string", description="The search query to use.", required=True),
         ]
     ),
+    ToolDefinition(
+        name="zoom",
+        description="Zoom in or out on the current page.",
+        parameters=[
+            ToolParameter(name="level", type="integer", description="The zoom level to set as a percentage (e.g., 100 for 100%).", required=True),
+        ]
+    ),
+    ToolDefinition(
+        name="go_to_url",
+        description="Navigate to a specific URL as understood by the user's prompt. (e.g., 'go to Bing').",
+        parameters=[
+            ToolParameter(name="url", type="string", description="The URL to navigate to.", required=True),
+        ]
+    )
 ]
 
 def get_tool_definitions() -> List[Dict[str, Any]]:

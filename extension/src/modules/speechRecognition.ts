@@ -181,60 +181,33 @@ export class SpeechRecognizer extends EventTarget {
             // Restart recognition if it was continuous
             if (this.recognition?.continuous) {
                 console.log("Restarting speech recognition in continuous mode");
-                this.startListening();
+                requestAnimationFrame(() => {
+                    if (!this.isListening && this.recognition?.continuous) {
+                         this.startListening();
+                    } else {
+                        console.log("Speech recognition ended, but not restarting in continuous mode");
+                    }
+                });
             } else {
                 console.log("Started custom voice activity detection after speech recognition ended");
-            this.audioManager?.startVoiceActivityDetection();
+                this.audioManager?.startVoiceActivityDetection();
             }
         }
 
         this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
             this.isListening = false;
             this.isCommandDetected = false;
-            if (this.recognition?.continuous) {
-                switch(event.error) {
-                    case 'no-speech':
-                        console.log("No speech detected...listening again");
-                        if (!this.isListening) {
-                            this.startListening();
-                        }
-                        break;
-                    case 'aborted':
-                        console.log("Speech recognition aborted");
-                        break;
-                    case 'not-allowed':
-                    case 'audio-capture':
-                        console.error("Critical error. Stopping recognition and disabling continuous mode. ", event.error);
-                        this.recognition.continuous = false;
-                        this.audioManager?.startVoiceActivityDetection();
-                        this.dispatchEvent(new CustomEvent('speech:error', {
-                            detail: { timestamp: Date.now(), error: event.error, message: event.message }
-                        }));
-                        break;
-                    case 'network':
-                        console.error("Network error, retrying recognition");
-                        setTimeout(() => {
-                            if (!this.isListening) {
-                                this.startListening();
-                            }
-                        }, 3000);
-                        break;
-                    default:
-                        console.error("Restarting speech recognition after unknown error occurred:", event.error);
-                        setTimeout(() => {
-                            if (!this.isListening) {
-                                this.startListening();
-                            }
-                        }, 1000);
-                        break;
+            if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+                console.log("Stopping voice activity detection due to critical error: ", event.error);
+                if (this.recognition?.continuous) {
+                    this.recognition.continuous = false;
                 }
-            } else {
-                // If not continuous, just start voice activity detection
-                console.log("Started voice activity detection after speech recognition error");
                 this.audioManager?.startVoiceActivityDetection();
+                this.dispatchEvent(new CustomEvent('speech:error', {
+                    detail: { error: event.error, message: event.message }
+                }));
             }
         }
-
 
         this.recognition.onresult = async (event: SpeechRecognitionEvent) => {
             let interimTranscript = '';
@@ -253,10 +226,6 @@ export class SpeechRecognizer extends EventTarget {
 
             // Handle interim transcript results
             if (interimTranscript) {
-                this.dispatchEvent(new CustomEvent('speech:result', {
-                detail: { transcript: interimTranscript, isFinal: false }
-                }));
-
                 if (this.detectWakeWord(interimTranscript) && !this.isCommandDetected) {
                 this.handleWakeup();
                 return;
@@ -266,9 +235,6 @@ export class SpeechRecognizer extends EventTarget {
             // Handle final transcript results
             if (finalTranscript) {
                 console.log("Final transcript:", finalTranscript);
-                this.dispatchEvent(new CustomEvent('speech:result', {
-                    detail: { transcript: finalTranscript, isFinal: true }
-                }));
 
                 if (this.detectWakeWord(finalTranscript) && !this.isCommandDetected) {
                     this.handleWakeup();
@@ -277,6 +243,15 @@ export class SpeechRecognizer extends EventTarget {
                 
                 if (this.detectSleepCommand(finalTranscript)) {
                     this.handleSleep();
+                }
+
+                // Only send the result if we're in command mode (wake word was previously detected)
+                if (this.isCommandDetected || this.recognition?.continuous) {
+                    this.dispatchEvent(new CustomEvent('speech:result', {
+                        detail: { transcript: finalTranscript, isFinal: true }
+                    }));
+                } else {
+                    console.log("Ignoring transcript - no wake word detected:", finalTranscript);
                 }
                 // Reset command detection state for next transcript
                 this.isCommandDetected = false;
@@ -394,8 +369,8 @@ export class SpeechRecognizer extends EventTarget {
             return;
         }
         try {
-            this.recognition.start();
             this.isListening = true;
+            this.recognition.start();
             console.log("Speech recognition started");
         } catch (error) {
             console.error("Error starting speech recognition:", error);

@@ -1,6 +1,8 @@
 import { ChromeRuntimeMessage } from "../models/types";
 import { AudioManager } from "../modules/audio";
 import { SpeechRecognizer } from "../modules/speechRecognition";
+import { AgentAction } from "../models/types";
+import { BrowserActions } from "../actions/actions";
 
 console.log("Initializing audio content script...");
 
@@ -8,38 +10,89 @@ let audioManager: AudioManager | null = null;
 let speechRecognizer: SpeechRecognizer | null = null;
 let isInitialized = false;
 
+function executeAgentAction(action: AgentAction): void {
+    console.log(`Executing agent action: ${JSON.stringify(action)}`);
+    
+    switch (action.type) {
+        case "web_search":
+            BrowserActions.webSearch(action.query);
+            break;
+        case "click_element":
+            BrowserActions.click_element(action.selector);
+            break;
+        case "type_text":
+            BrowserActions.typeText(action.text, action.selector);
+            break;
+        case "scroll_direction":
+            BrowserActions.scrollDirection(action.direction, action.amount);
+            break;
+        case "scroll_position":
+            BrowserActions.scrollPosition(action.selector, action.scrollPosition);
+            break;
+        case "describe_page":
+            // Handle describe_page action
+            // TODO: Implement the logic to describe the page
+            console.log("Describe page action:", action.description);
+            break;
+        case "go_back":
+            BrowserActions.goBack(action.tabIndex);
+            break;
+        case "go_forward":
+            BrowserActions.goForward(action.tabIndex);
+            break;
+        case "refresh_page":
+            BrowserActions.refreshPage(action.tabIndex);
+            break;
+        case "zoom":
+            BrowserActions.zoom(action.level);
+            break;
+        case "go_to_url":
+            BrowserActions.goToUrl(action.url);
+            break;
+        default:
+            // TypeScript sometimes infers 'never' if all cases are covered; ensure AgentAction allows for unknown types.
+            console.warn(`Unhandled agent action type: ${(action as AgentAction).type}`);
+    }
+}
+
+function setupChromeRuntimeListeners(): void {
+    chrome.runtime.onMessage.addListener((message: ChromeRuntimeMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
+        console.log(`Received message in audioContent: ${JSON.stringify(message)}`);
+        switch (message.type) {
+            case "USER_COMMAND_STARTED":
+                audioManager?.stopAllAudioPlayback();
+                break;
+            case "TAB_ACTIVATED":
+                try {
+                    console.log("Tab activated in audioContent script");
+                    // If the tab is activated, we can initialize the audio manager and speech recognizer
+                    const htmlContent = getPageContent();
+                    console.log("HTML content captured:", htmlContent);
+                    sendResponse({html: htmlContent});
+                } catch (error) {
+                    console.error("Error capturing HTML content:", error);
+                    sendResponse({error: "Failed to capture HTML content"});
+                }
+                
+                break;
+            case "AGENT_ACTION":
+                if (message.action) {
+                    executeAgentAction(message.action);
+                }
+                break;
+            default:
+                console.warn(`Unhandled message type in audioContent: ${message.type}`);
+        }
+        return true;
+    });
+}
+
 // TODO: use dispatchEvent from modules, use chrome runtime messages for scripts
 function setupAudioEventListeners(): void {
     if (!audioManager || !speechRecognizer) {
         console.error("AudioManager or SpeechRecognizer not initialized");
         return;
     }
-    chrome.runtime.onMessage.addListener((message: ChromeRuntimeMessage, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
-        console.log(`Received chrome message in audioContent: ${JSON.stringify(message)}`);
-
-        switch (message.type) {
-            case "START_LISTENING":
-                if (isInitialized) {
-                    speechRecognizer?.startListening();
-                } else {
-                    console.warn("AudioManager or SpeechRecognizer not initialized yet, waiting for user gesture...");
-                }
-                break;
-            case "STOP_LISTENING":
-                speechRecognizer?.stopListening();
-                break;
-            case 'PLAY_AUDIO':
-                console.log("Playing audio from content script");
-                break;
-            case "USER_COMMAND_STARTED":
-                console.log("User command detected in audioContent at ", message.timestamp);
-                audioManager?.stopAllAudioPlayback();
-                break;
-            default:
-                console.warn(`Unhandled message type in audioContent: ${message.type}`);
-                break;
-        }
-    });
 
     audioManager.addEventListener('audio:initialized', (event: Event) => {
         console.log("AudioManager initialized");
@@ -107,6 +160,37 @@ function setupAudioEventListeners(): void {
 }
 
 /**
+ * Get the cleaned-up HTML content of the current page.
+ * This function removes unnecessary elements like scripts, styles, and other non-essential content
+ * to provide a clean HTML structure for further processing.
+ * @returns The HTML content of the current page, cleaned up and ready for processing.
+ */
+function getPageContent(): string {
+    const doc = document.cloneNode(true) as Document;
+
+    const elementsToRemove = [
+        'script', 'style', 'link[rel="stylesheet"]', 'meta[name="viewport"]',
+        'meta[name="description"]', 'meta[name="keywords"]', 'meta[name="author"]',
+        'object', 'embed', 'iframe', 'noscript', 'svg', 'canvas',
+    ]
+    elementsToRemove.forEach(selector => {
+        const elements = doc.querySelectorAll(selector);
+        elements.forEach(el => el.remove());
+    });
+
+    const body = doc.body;
+    if(!body) return '';
+
+    const html = body.innerHTML
+    .replace(/\s+/g, ' ') // Remove extra whitespace
+    .replace(/<!--[\s\S]*?-->/g, '') // Remove comments
+    .replace(/>\s+</g, '><') // Remove whitespace between tags
+    .trim(); // Trim leading and trailing whitespace
+
+    return html;
+}
+
+/**
  * After user interaction, initialize the audio manager, speech recognizer, and listeners.
  * This function is called when a user gesture is detected.
  * @returns {Promise<void>} A promise that resolves when the script is initialized.
@@ -160,7 +244,14 @@ function setupUserGestureListeners(): void {
 
 
 function main(): void {
+    
     setupUserGestureListeners();
+    setupChromeRuntimeListeners();
+    chrome.runtime.sendMessage({
+        type: "SCRIPT_LOADED",
+        timestamp: Date.now(),
+        url: window.location.href
+    });
 }
 
 // Immediately invoke the main function to start the content script

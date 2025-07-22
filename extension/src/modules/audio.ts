@@ -114,7 +114,7 @@ export class AudioManager extends EventTarget{
         }
 
         const averageVolume = totalVolume / (voiceRangeEnd - voiceRangeStart);
-        const threshold = 75;
+        const threshold = 60;
         console.debug(`Average volume in voice range: ${averageVolume}, Threshold: ${threshold}`);
         return averageVolume > threshold;
     }

@@ -22,12 +22,17 @@ type ChromeRuntimeMessage =
 | {type: "USER_COMMAND_RESULT"; timestamp: number; transcript: string}
 | {type: "START_LISTENING"; timestamp: number}
 | {type: "STOP_LISTENING"; timestamp: number}
-| {type: "PLAY_AUDIO"; timestamp: number}
+| {type: "PLAY_AUDIO"; timestamp: number, audio: string | Blob} 
+
+// Agent action messages
+| {type: "AGENT_ACTION"; action: AgentAction; timestamp: number}
 
 // Tab management messages
+| {type: "SCRIPT_LOADED"; timestamp: number}
 | {type: "TAB_OPEN"; tabId: number}
 | {type: "TAB_CLOSED"; tabId: number}
 | {type: "TAB_ACTIVATED"; tabId: number};
+
 
 
 /**
@@ -54,15 +59,15 @@ type UserPrompt = {
  * Type for the agent action that can be performed
  */
 type AgentActionType = 
-    | "SWITCH_TAB"
-    | "SEARCH"
-    | "SCROLL"
-    | "ENTER_TEXT"
-    | "CLICK"
-    | "DESCRIBE_SCREEN"
-    | "ZOOM_IN"
-    | "ZOOM_OUT"
-    | "GO_TO_SITE";
+    | "web_search"
+    | "click_element"
+    | "type_text"
+    | "scroll_position"
+    | "scroll_direction"
+    | "describe_page"
+    | "go_back"
+    | "go_forward"
+    | "go_to_site";
 
 
 /**
@@ -70,15 +75,18 @@ type AgentActionType =
  * action to be performed in the browser on behalf o fhte user.
  * Each action can have different parameters based on the action type
  */
-type AgentAction = 
-    | {type: AgentActionType; tabIndex: number}
-    | {type: AgentActionType; query: string}
-    | {type: AgentActionType; direction: 'UP' | 'DOWN', amount: number}
-    | {type: AgentActionType; text: string, elementSelector: string}
-    | {type: AgentActionType; elementSelector: string}
-    | {type: AgentActionType; description: Stream}
-    | {type: AgentActionType; amount: number}
-    | {type: AgentActionType; amount: number}
-    | {type: AgentActionType; url: string};
+type AgentAction =
+    | {type: "web_search"; query: string}
+    | {type: "click_element"; selector: string}
+    | {type: "type_text"; text: string; selector: string}
+    | {type: "scroll_direction"; direction: 'UP' | 'DOWN'; amount: number}
+    | {type: "scroll_position"; scrollPosition: number | null; selector: string | null}
+    | {type: "describe_page"; description: string | Stream}
+    | {type: "go_back"; tabIndex: number}
+    | {type: "go_forward"; tabIndex: number}
+    | {type: "refresh_page"; tabIndex: number}
+    | {type: "zoom"; level: number}
+    | {type: "go_to_url"; url: string}
+    | {type: "play_audio"; audio: string | Blob};
     
 export { TabContext, AgentAction, AgentActionType, UserPrompt, ChromeRuntimeMessage };
