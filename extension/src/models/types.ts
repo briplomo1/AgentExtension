@@ -3,6 +3,34 @@ import Stream from "stream";
 // This file defines types used across the extension
 
 /**
+ * Chrome runtime messages to send and receive
+ * These messages are used to communicate between the content script and the background script.
+ * Defines the types of messages that can be sent and received.
+ */
+type ChromeRuntimeMessage =
+// Audio processing messages
+| {type: "USER_COMMAND_STARTED"; timestamp: number}
+| {type: "AUDIO_CAPTURE_STARTED"; timestamp: number}
+| {type: "AUDIO_CAPTURE_STOPPED"; timestamp: number}
+| {type: "AUDIO_CAPTURE_ERROR"; timestamp: number; error: string; message: string}
+| {type: "SPEECH_RECOGNITION_STARTED"; timestamp: number}
+| {type: "SPEECH_RECOGNITION_ENDED"; timestamp: number}
+| {type: "SPEECH_RECOGNITION_ERROR"; timestamp: number; error: string; message: string}
+| {type: "VOICE_ACTIVITY_DETECTED"; timestamp: number}
+| {type: "COPILOT_START"; timestamp: number}
+| {type: "COPILOT_STOP"; timestamp: number}
+| {type: "USER_COMMAND_RESULT"; timestamp: number; transcript: string}
+| {type: "START_LISTENING"; timestamp: number}
+| {type: "STOP_LISTENING"; timestamp: number}
+| {type: "PLAY_AUDIO"; timestamp: number}
+
+// Tab management messages
+| {type: "TAB_OPEN"; tabId: number}
+| {type: "TAB_CLOSED"; tabId: number}
+| {type: "TAB_ACTIVATED"; tabId: number};
+
+
+/**
  * Interface for the context of the current tab
  */
 type TabContext = {
@@ -52,6 +80,5 @@ type AgentAction =
     | {type: AgentActionType; amount: number}
     | {type: AgentActionType; amount: number}
     | {type: AgentActionType; url: string};
-
     
-export { TabContext, AgentAction, AgentActionType, UserPrompt };
+export { TabContext, AgentAction, AgentActionType, UserPrompt, ChromeRuntimeMessage };

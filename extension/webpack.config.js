@@ -3,8 +3,7 @@ const path = require('path');
 module.exports = {
   mode: 'development',
   entry: {
-    initializeAudio: './src/contentScripts/initializeAudio.ts',
-    actionListeners: './src/contentScripts/actionListeners.ts',
+    audioContent: './src/contentScripts/audioContent.ts',
     popup: './src/static/popup/popup.ts',
     background: './src/background.ts'
   },
