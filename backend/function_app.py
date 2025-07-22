@@ -1,3 +1,4 @@
+import json
 import uuid
 import azure.functions as func
 import logging
@@ -8,7 +9,7 @@ import os
 
 app = df.DFApp(http_auth_level=func.AuthLevel.FUNCTION)
 
-def size_chat_window(messages: list[dict]) -> list[dict]:
+def size_chat_window(messages: list):
     """
     Calculate the size of the chat window based on the number of messages.
     Resize the chat window if it exceeds a certain size to keep token costs and utilization below
@@ -32,7 +33,10 @@ def Messages(context: df.DurableEntityContext):
             "commands which can be interpreted as actions to be taken by the extension on "
             "behalf of the user. Given the following html code and screenshot of the current tab, "
             "interpret each of the user's prompts and see if you have a tool that matches what they need."
-            "If you do, return the action that the extension will take using the tool."
+            "If you do, call the appropriate tool function with the correct parameters. "
+            "IMPORTANT: Always provide a clear but brief conversational response explaining what you're doing, "
+            "as this will be read aloud to the user. Your response should be natural and descriptive, "
+            "helping the user understand what action you're taking on their behalf."
         }
     ])
 
@@ -56,7 +60,8 @@ def Messages(context: df.DurableEntityContext):
     
 
 @app.route(route="orchestrators/{functionName}")
-async def http_start(req: func.HttpRequest, client) -> func.HttpResponse:
+@app.durable_client_input(client_name="client")
+async def http_start(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
     logging.info("HTTP trigger for orchestrator function started")
     function_name = req.route_params.get('functionName')
     if not function_name:
@@ -83,7 +88,7 @@ def agent_init_orchestrator(context: df.DurableOrchestrationContext):
     # Process html and screenshot context
     result = yield context.call_activity("process_chat_context", context.get_input())
 
-    if not result or result.get("status") != "success" or result.get("chat_thread_UUID") is None:
+    if not result or result.get("status") != "success" or result.get("chat_thread_id") is None:
         logging.error(f"Agent initialization failed: {result}")
         return {
             "status": "error",
@@ -150,19 +155,62 @@ def agent_action_orchestrator(context: df.DurableOrchestrationContext):
     
     logging.info(f"Agent action orchestrator completed with result: {result}")
     # Return the action from the result
-    return result.get("action", "")
+    return result
 
 
-@app.activity_trigger(input_name="user_prompt")
-def get_action_activity(request: dict[str, str]):
-    user_prompt = request.get("user_prompt", "")
-    chat_thread_id = request.get("chat_thread_id", "")
-    logging.info(f"Executing agent action function with user prompt: {user_prompt}")
+@app.activity_trigger(input_name="messages")
+def get_action_activity(messages: list):
+    logging.info("Starting get action activity")
+    try:
+        from tools import get_tool_definitions
+        tool_definitions = get_tool_definitions()
+        with AzureOpenAI(api_key=os.environ.get("AZURE_OPENAI_API_KEY"), endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")) as chat_client:
 
-    with AzureOpenAI(api_key=os.environ.get("")) as openAIClient:
+            response = chat_client.chat.completions.create(
+                model=os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME"),
+                messages=messages,
+                tools=tool_definitions,
+            )
 
+            message = response.choices[0].message
+            spoken_response = message.content
 
-    
+            if message.tool_calls:
+                tool_calls_info = []
+                for tool_call in message.tool_calls:
+                    action = tool_call.function.name
+                    args = json.loads(tool_call.function.arguments)
+
+                    logging.info(f"Tool call detected: {action} with args: {args}")
+                    tool_calls_info.append({
+                        "action": action,
+                        "arguments": args
+                    })
+                return {
+                    "status": "success",
+                    "response_type": "tool_calls",
+                    "chat_message": spoken_response,
+                    "actions": tool_calls_info,
+                    "error": None
+                }
+            else:
+                logging.info("No tool calls detected in the response")
+                return {
+                    "status": "success",
+                    "response_type": "message",
+                    "chat_message": spoken_response,
+                    "actions": [],
+                    "error": None
+                }
+
+    except Exception as e:
+        logging.error(f"Error in get_action_activity: {e}")
+        return {
+            "status": "error",
+            "chat_message": "Im sorry an error ocurred while processing your command!",
+            "actions": [],
+            "error": str(e)
+        }
     # TODO: Feed the user prompt to the agent model to get the action
 
     # TODO : Get agent tools that can be used to decide the action
@@ -172,7 +220,7 @@ def get_action_activity(request: dict[str, str]):
     return
 
 @app.activity_trigger(input_name="tab_context")
-def process_chat_context(tab_context: dict[str, str]):
+def process_chat_context(tab_context: dict):
     logging.info("Initializing chat message thread with tab context")
 
     tab_id = tab_context.get("tabId", "")
