@@ -5,7 +5,13 @@ import logging
 import azure.durable_functions as df
 from openai import AzureOpenAI
 import os
-from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesizer, SpeechSynthesisOutputFormat, ResultReason
+from azure.cognitiveservices.speech import (
+    SpeechConfig, 
+    SpeechSynthesizer, 
+    SpeechSynthesisOutputFormat, 
+    ResultReason,
+)
+from azure.cognitiveservices.speech.audio import AudioOutputConfig
 import base64
 
 
@@ -17,6 +23,10 @@ OPEN_AI_API_KEY = os.environ.get("AZURE_OPENAI_API_KEY")
 OPEN_AI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
 OPEN_AI_API_VER = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
 AZURE_OPENAI_DEPLOYMENT_NAME = os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME")
+
+speech_config = SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
+speech_config.speech_synthesis_output_format = SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3
+SYNTHESIZER = SpeechSynthesizer(speech_config=speech_config, audio_config=None)
 
 SYSTEM_MESSAGE = ( 
     "You are a helpful assistant that backs a browser extension. "
@@ -45,7 +55,7 @@ def size_chat_window(messages: list):
 
     return messages
 
-def text_to_speech(text: str, synthesizer: SpeechSynthesizer, voice_name: str = "en-US-JennyNeural") -> str:
+def text_to_speech(text: str) -> str:
     """
     Convert text to speech using Azure OpenAI's TTS capabilities.
     Returns a base64-encoded string of the audio data.
@@ -55,16 +65,18 @@ def text_to_speech(text: str, synthesizer: SpeechSynthesizer, voice_name: str = 
             logging.warning("No text provided for speech synthesis")
             return None
         ssml = f"""
-        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
-            <voice name='{voice_name}'>
-                <prosody rate='0.9' pitch='0%'>
-                    {text}
-                </prosody>
+        <speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US' xmlns:mstts='http://www.w3.org/2001/mstts'>
+            <voice name='en-US-SaraNeural'>
+                <mstts:express-as style="friendly" styledegree="2">
+                    <prosody rate='0.95' pitch='+5%' volume='+10%'>
+                        {text}
+                    </prosody>
+                </mstts:express-as>
             </voice>
         </speak>
         """
 
-        result = synthesizer.speak_ssml_async(ssml).get()
+        result = SYNTHESIZER.speak_ssml_async(ssml).get()
 
         if result.reason == ResultReason.SynthesizingAudioCompleted:
             # Convert audio data to base64 string
@@ -290,11 +302,7 @@ def get_action_activity(messages: list):
     try:
         from tools import get_tool_definitions
         tool_definitions = get_tool_definitions()
-        speech_config = SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
-        speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"
-        speech_config.speech_synthesis_output_format = SpeechSynthesisOutputFormat.Audio16Khz32KBitRateMonoMp3      
         with AzureOpenAI(api_key=OPEN_AI_API_KEY, azure_endpoint=OPEN_AI_ENDPOINT, api_version=OPEN_AI_API_VER) as chat_client:
-            synthesizer = SpeechSynthesizer(speech_config=speech_config)
             logging.info(f"Chat messages received: {messages}")
             # Call model with messages and tool definitions
             response = chat_client.chat.completions.create(
@@ -316,7 +324,7 @@ def get_action_activity(messages: list):
                 chat_response = "I'm here to help you."
 
             # Get text to speech for model response
-            audio_data_b64 = text_to_speech(chat_response, synthesizer, voice_name=speech_config.speech_synthesis_voice_name)
+            audio_data_b64 = text_to_speech(chat_response)
 
             if message.tool_calls:
                 tool_calls_info = []
@@ -375,7 +383,7 @@ def process_chat_context(tab_context: dict):
     return {
         "status": "success",
         "chatThreadId": chat_thread_id,
-        "content": "<!DOCTYPE html><html><head><title>Test Page</title></head><body><input type=\"text\" id=\"textField\" placeholder=\"Enter text here\"><button id=\"submitBtn\">Submit</button></body></html>",
+        "content": html_content,
         "screenshot": screenshot_url,
         "error": None
     }
