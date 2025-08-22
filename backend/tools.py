@@ -61,11 +61,24 @@ EXTENSION_TOOLS = [
     ),
     ToolDefinition(
         name="click_element",
-        description="Perform a click action on a web element which should be identified by CSS selector and described.",
+        description="Perform a click action on a web element as described by the user. Use the HTML and image of the browser to identify the element and return a identifier. Use standard CSS selectors only - no jQuery selectors like :contains(). Examples: 'button[type=\"submit\"]', '.login-button', '#submit-btn', 'button:first-child', 'a[href*=\"login\"]'." \
+        "Use the users description of the element to find the correct element on the screen to click.",
         parameters=[
-            ToolParameter(name="selector", type="string", description="The CSS selector of the element to click.", required=True),
+            ToolParameter(name="selector", type="string", description="The CSS selector of the element to click. Must be valid CSS selector (no :contains, no jQuery). Examples: 'button[type=\"submit\"]', '.btn-login', '#login-button', 'input[value=\"Login\"]'.", required=True),
         ]
     ),
+    ToolDefinition(
+    name="interact_with_iframe",
+    description="Interact with embedded content inside an iframe (videos, forms, maps, documents, games, etc.). Use this when user wants to interact with any embedded content like playing videos, filling forms, navigating maps, or clicking within embedded applications.",
+    parameters=[
+        ToolParameter(name="iframe_selector", type="string", description="CSS selector for the iframe element (e.g., '#player', 'iframe[src*=\"youtube\"]', 'iframe[title*=\"map\"]')", required=True),
+        ToolParameter(name="action", type="string", description="Action to perform with the iframe", required=True, enum_values=[
+            "click_play", "click_pause", "toggle_play", 
+            "send_spacebar", "send_enter",
+            "click_coordinates"
+        ]),
+    ]
+),
     ToolDefinition(
         name="screenshot_capture",
         description="Capture a screenshot of the current page.",
@@ -107,7 +120,9 @@ EXTENSION_TOOLS = [
     ToolDefinition(
         name="describe_page",
         description="Provide a brief description of the current web page and the elements it contains to a layperson.",
-        parameters=[]
+        parameters=[
+            ToolParameter(name="description", type="string", description="A brief description of the page content and elements. Highlight the interactable elements and keep it brief.", required=False)
+        ]
     ),
     ToolDefinition(
         name="go_back",
